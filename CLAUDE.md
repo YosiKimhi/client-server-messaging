@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+- for every task or request on this projects pick the best agent for the task! think who whould solve of implement the task in the must efficient way, and then let him do the task צמ 
+
 ## Project Overview
 
 This is a secure client-server messaging application with the following architecture:
