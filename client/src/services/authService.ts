@@ -1,10 +1,13 @@
 // Authentication service for API communication
+import { storeUserPrivateKey, parseEncryptedPrivateKeyData, cleanupEncryptionData } from '../utils/encryption';
+
 const API_BASE_URL = 'http://localhost:3001/api';
 
 export interface User {
   id: string;
   username: string;
   email: string;
+  private_key_encrypted?: string;
 }
 
 export interface LoginRequest {
@@ -44,8 +47,18 @@ class AuthService {
   }
 
   removeToken(): void {
+    const currentUser = this.getUser();
     localStorage.removeItem(this.tokenKey);
     localStorage.removeItem(this.userKey);
+    
+    // Clean up encryption data when token is removed
+    if (currentUser) {
+      try {
+        cleanupEncryptionData(currentUser.id);
+      } catch (error) {
+        console.error('Failed to cleanup encryption data during token removal:', error);
+      }
+    }
   }
 
   // User management
@@ -116,11 +129,25 @@ class AuthService {
       body: JSON.stringify(credentials),
     });
 
-    // Store token and user data
-    this.setToken(response.token);
-    this.setUser(response.user);
+    // Extract auth data from server response (server wraps response in data field)
+    const authData = response.data || response;
 
-    return response;
+    // Store token and user data
+    this.setToken(authData.token);
+    this.setUser(authData.user);
+
+    // Store encrypted private key locally if returned from server
+    if (authData.user.private_key_encrypted) {
+      try {
+        const encryptedPrivateKeyData = parseEncryptedPrivateKeyData(authData.user.private_key_encrypted);
+        storeUserPrivateKey(authData.user.id, encryptedPrivateKeyData);
+      } catch (error) {
+        console.error('Failed to store encrypted private key during login:', error);
+        // Don't fail login if key storage fails, just log the error
+      }
+    }
+
+    return authData;
   }
 
   async register(userData: RegisterRequest): Promise<AuthResponse> {
@@ -129,14 +156,28 @@ class AuthService {
       body: JSON.stringify(userData),
     });
 
-    // Store token and user data
-    this.setToken(response.token);
-    this.setUser(response.user);
+    // Extract auth data from server response (server wraps response in data field)
+    const authData = response.data || response;
 
-    return response;
+    // Store token and user data
+    this.setToken(authData.token);
+    this.setUser(authData.user);
+
+    // Store encrypted private key locally for this user
+    try {
+      const encryptedPrivateKeyData = parseEncryptedPrivateKeyData(userData.private_key_encrypted);
+      storeUserPrivateKey(authData.user.id, encryptedPrivateKeyData);
+    } catch (error) {
+      console.error('Failed to store encrypted private key:', error);
+      // Don't fail registration if key storage fails, just log the error
+    }
+
+    return authData;
   }
 
   async logout(): Promise<void> {
+    const currentUser = this.getUser();
+    
     try {
       // Call logout endpoint if authenticated
       if (this.isAuthenticated()) {
@@ -150,16 +191,28 @@ class AuthService {
     } finally {
       // Always clear local storage
       this.removeToken();
+      
+      // Clean up encryption data for the current user
+      if (currentUser) {
+        try {
+          cleanupEncryptionData(currentUser.id);
+        } catch (error) {
+          console.error('Failed to cleanup encryption data:', error);
+        }
+      }
     }
   }
 
   async getProfile(): Promise<User> {
     const response = await this.makeRequest('/auth/profile');
     
-    // Update stored user data
-    this.setUser(response.user);
+    // Extract data from server response (server wraps response in data field)
+    const userData = response.data || response.user || response;
     
-    return response.user;
+    // Update stored user data
+    this.setUser(userData);
+    
+    return userData;
   }
 
   // Utility method to handle token expiry

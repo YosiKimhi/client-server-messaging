@@ -236,7 +236,7 @@ export class AuthService {
 
         // Get the created user
         const userResult = await client.query(
-          'SELECT id, username, email, public_key, is_active, created_at, updated_at FROM users WHERE id = $1',
+          'SELECT id, username, email, public_key, private_key_encrypted, is_active, created_at, updated_at FROM users WHERE id = $1',
           [userId]
         );
 
@@ -264,6 +264,7 @@ export class AuthService {
           username: result.user.username,
           email: result.user.email,
           public_key: result.user.public_key,
+          private_key_encrypted: result.user.private_key_encrypted,
           is_active: result.user.is_active,
           created_at: result.user.created_at,
           updated_at: result.user.updated_at,
@@ -297,7 +298,7 @@ export class AuthService {
     try {
       // Get user by username
       const userResult = await query(
-        `SELECT id, username, email, password_hash, salt, public_key, is_active, created_at, updated_at, last_login
+        `SELECT id, username, email, password_hash, salt, public_key, private_key_encrypted, is_active, created_at, updated_at, last_login
          FROM users 
          WHERE username = $1 AND is_active = true`,
         [loginData.username]
@@ -362,6 +363,7 @@ export class AuthService {
           username: result.user.username,
           email: result.user.email,
           public_key: result.user.public_key,
+          private_key_encrypted: result.user.private_key_encrypted,
           is_active: result.user.is_active,
           created_at: result.user.created_at,
           updated_at: result.user.updated_at,

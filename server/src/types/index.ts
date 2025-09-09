@@ -89,7 +89,9 @@ export interface SendMessageRequest {
 }
 
 export interface AuthResponse {
-  user: Omit<User, 'password_hash' | 'salt' | 'private_key_encrypted'>;
+  user: Omit<User, 'password_hash' | 'salt' | 'private_key_encrypted'> & {
+    private_key_encrypted?: string;
+  };
   token: string;
   expires_at: Date;
 }

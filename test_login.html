@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Test</title>
+</head>
+<body>
+    <h1>Login Test - Check Console</h1>
+    <button onclick="testLogin()">Test Login with Alice Demo</button>
+    <div id="result"></div>
+
+    <script>
+        async function testLogin() {
+            const resultDiv = document.getElementById('result');
+            try {
+                const response = await fetch('http://localhost:3001/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'alice_demo',
+                        password: 'SecurePass123!'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    console.log('Login successful!', data);
+                    console.log('Private key encrypted:', data.data.user.private_key_encrypted ? 'YES' : 'NO');
+                    console.log('Token:', data.data.token);
+                    console.log('User:', data.data.user);
+                    
+                    resultDiv.innerHTML = `
+                        <h2>Login Successful!</h2>
+                        <p><strong>Username:</strong> ${data.data.user.username}</p>
+                        <p><strong>Email:</strong> ${data.data.user.email}</p>
+                        <p><strong>Private Key Included:</strong> ${data.data.user.private_key_encrypted ? 'YES' : 'NO'}</p>
+                        <p><strong>Token:</strong> ${data.data.token.substring(0, 20)}...</p>
+                    `;
+                } else {
+                    console.error('Login failed:', data);
+                    resultDiv.innerHTML = `<h2>Login Failed</h2><p>${data.error.message}</p>`;
+                }
+            } catch (error) {
+                console.error('Network error:', error);
+                resultDiv.innerHTML = `<h2>Network Error</h2><p>${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

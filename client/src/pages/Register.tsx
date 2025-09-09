@@ -6,15 +6,20 @@ import {
   Typography,
   Box,
   Link,
-  Alert
+  Alert,
+  LinearProgress,
+  Chip
 } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { ApiError } from '../services/authService'
+import { useRegistrationEncryption } from '../hooks/useEncryption'
+import { isCryptoSupported } from '../utils/encryption'
 
 const Register: React.FC = () => {
   const navigate = useNavigate()
   const { register, isAuthenticated } = useAuth()
+  const { generateAndFormatKeys, state: encryptionState } = useRegistrationEncryption()
   
   const [formData, setFormData] = useState({
     username: '',
@@ -24,6 +29,8 @@ const Register: React.FC = () => {
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [isGeneratingKeys, setIsGeneratingKeys] = useState(false)
+  const [cryptoSupported] = useState(isCryptoSupported())
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -121,16 +128,33 @@ const Register: React.FC = () => {
       return
     }
 
+    // Check if encryption is supported
+    if (!cryptoSupported) {
+      setError('Your browser does not support the required encryption features. Please use a modern browser.')
+      return
+    }
+
     setLoading(true)
+    setIsGeneratingKeys(true)
     setError('')
     
     try {
+      // Generate encryption keys
+      const encryptionData = await generateAndFormatKeys(formData.password)
+      
+      if (!encryptionData) {
+        throw new Error('Failed to generate encryption keys. Please try again.')
+      }
+
+      setIsGeneratingKeys(false)
+      
+      // Register with encryption keys
       await register({
         username: formData.username.trim(),
         email: formData.email.trim(),
         password: formData.password,
-        public_key: '', // Placeholder until RSA implementation
-        private_key_encrypted: '' // Placeholder until RSA implementation
+        public_key: encryptionData.public_key,
+        private_key_encrypted: encryptionData.private_key_encrypted
       })
       
       // Navigation will be handled by the useEffect above
@@ -139,6 +163,7 @@ const Register: React.FC = () => {
     } catch (err) {
       const error = err as ApiError
       setError(error.message || 'Registration failed. Please try again.')
+      setIsGeneratingKeys(false)
     } finally {
       setLoading(false)
     }
@@ -165,10 +190,39 @@ const Register: React.FC = () => {
           Register
         </Typography>
         
+        {!cryptoSupported && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Your browser does not support encryption features required for secure messaging. Please use a modern browser.
+          </Alert>
+        )}
+        
+        {encryptionState.error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            Encryption Error: {encryptionState.error}
+          </Alert>
+        )}
+        
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
+        )}
+
+        {isGeneratingKeys && (
+          <Box sx={{ mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <Typography variant="body2" sx={{ flexGrow: 1 }}>
+                Generating encryption keys...
+              </Typography>
+              <Chip 
+                label="Encrypting" 
+                size="small" 
+                color="primary" 
+                sx={{ ml: 1 }}
+              />
+            </Box>
+            <LinearProgress />
+          </Box>
         )}
 
         <form onSubmit={handleSubmit}>
@@ -240,9 +294,14 @@ const Register: React.FC = () => {
             fullWidth
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
-            disabled={loading}
+            disabled={loading || !cryptoSupported}
           >
-            {loading ? 'Creating Account...' : 'Create Account'}
+            {isGeneratingKeys 
+              ? 'Generating Keys...' 
+              : loading 
+                ? 'Creating Account...' 
+                : 'Create Account'
+            }
           </Button>
 
           <Box textAlign="center">
