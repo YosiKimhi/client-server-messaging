@@ -1,8 +1,8 @@
-import { query, transaction } from '@/config/database';
-import { Message, MessageResponse, PaginatedResponse, SendMessageRequest } from '@/types';
+import { query, transaction } from '../config/database';
+import { Message, MessageResponse, PaginatedResponse, SendMessageRequest } from '../types/index';
 import { cryptoService } from './CryptoService';
 import { logAuditEvent } from '../models/AuditLog';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface SendMessageOptions {

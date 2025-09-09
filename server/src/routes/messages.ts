@@ -1,10 +1,10 @@
 import express from 'express';
-import { AuthenticatedRequest, SendMessageRequest, ApiResponse, MessageResponse, PaginatedResponse } from '@/types';
-import { MessageService } from '@/services/MessageService';
-import { authenticate } from '@/middleware/auth';
-import { logger } from '@/utils/logger';
-import { sanitizeString } from '@/utils/validation';
-import { logAuditEvent } from '@/models/AuditLog';
+import { AuthenticatedRequest, SendMessageRequest, ApiResponse, MessageResponse, PaginatedResponse } from '../types/index';
+import { MessageService } from '../services/MessageService';
+import { authenticate } from '../middleware/auth';
+import { logger } from '../utils/logger';
+import { sanitizeString } from '../utils/validation';
+import { logAuditEvent } from '../models/AuditLog';
 
 const router = express.Router();
 

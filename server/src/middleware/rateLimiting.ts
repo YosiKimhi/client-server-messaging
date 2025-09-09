@@ -1,7 +1,7 @@
 import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
-import { logger } from '@/utils/logger';
-import { logSecurityEvent, generateRateLimitKey } from '@/utils/validation';
+import { logger } from '../utils/logger';
+import { logSecurityEvent, generateRateLimitKey } from '../utils/validation';
 
 /**
  * Store for tracking rate limiting data in memory

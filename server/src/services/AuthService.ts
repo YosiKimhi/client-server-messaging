@@ -12,10 +12,10 @@ import {
   RegisterRequest,
   LoginRequest,
   EncryptionKeys
-} from '@/types';
-import { query, transaction } from '@/config/database';
-import { logger } from '@/utils/logger';
-import { logSecurityEvent } from '@/utils/validation';
+} from '../types/index';
+import { query, transaction } from '../config/database';
+import { logger } from '../utils/logger';
+import { logSecurityEvent } from '../utils/validation';
 
 export class AuthService {
   private static readonly BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);

@@ -1,6 +1,6 @@
-import { query } from '@/config/database';
-import { AuditLog } from '@/types';
-import { logger } from '@/utils/logger';
+import { query } from '../config/database';
+import { AuditLog } from '../types/index';
+import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
 export class AuditLogModel {

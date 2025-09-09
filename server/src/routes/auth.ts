@@ -1,19 +1,19 @@
 import { Router, Request, Response } from 'express';
-import { AuthenticatedRequest, RegisterRequest, LoginRequest, AuthResponse, UserProfile } from '@/types';
-import { AuthService } from '@/services/AuthService';
-import { authenticate, requestContext } from '@/middleware/auth';
+import { AuthenticatedRequest, RegisterRequest, LoginRequest, AuthResponse, UserProfile } from '../types/index';
+import { AuthService } from '../services/AuthService';
+import { authenticate, requestContext } from '../middleware/auth';
 import { 
   authRateLimit, 
   registerRateLimit 
-} from '@/middleware/rateLimiting';
+} from '../middleware/rateLimiting';
 import { 
   validateRegistration, 
   validateLogin, 
   handleValidationErrors,
   logSecurityEvent,
   sanitizeString
-} from '@/utils/validation';
-import { logger } from '@/utils/logger';
+} from '../utils/validation';
+import { logger } from '../utils/logger';
 
 const router = Router();
 

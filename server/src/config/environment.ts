@@ -1,8 +1,17 @@
 import dotenv from 'dotenv';
-import { logger } from '@/utils/logger';
+import * as path from 'path';
+import { logger } from '../utils/logger';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables with explicit path
+const envPath = path.join(__dirname, '../../.env');
+const result = dotenv.config({ path: envPath });
+
+if (result.error) {
+  console.error('Failed to load .env file:', result.error);
+} else {
+  console.log('Environment file loaded from:', envPath);
+  console.log('DB_PASSWORD from env:', process.env.DB_PASSWORD);
+}
 
 /**
  * Server configuration interface
@@ -204,7 +213,7 @@ function createConfig(): ServerConfig {
       port: parseInt(process.env.DB_PORT || '5432', 10),
       database: process.env.DB_NAME!,
       user: process.env.DB_USER!,
-      password: process.env.DB_PASSWORD || '',
+      password: String(process.env.DB_PASSWORD || 'postgres'),
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
       pool: {
         max: parseInt(process.env.DB_POOL_MAX || '20', 10),
@@ -263,10 +272,10 @@ function createConfig(): ServerConfig {
 
     logging: {
       level: process.env.LOG_LEVEL || 'info',
-      file: process.env.LOG_FILE,
-      maxSize: process.env.LOG_MAX_SIZE,
-      maxFiles: process.env.LOG_MAX_FILES ? parseInt(process.env.LOG_MAX_FILES, 10) : undefined,
-      datePattern: process.env.LOG_DATE_PATTERN
+      ...(process.env.LOG_FILE && { file: process.env.LOG_FILE }),
+      ...(process.env.LOG_MAX_SIZE && { maxSize: process.env.LOG_MAX_SIZE }),
+      ...(process.env.LOG_MAX_FILES && { maxFiles: parseInt(process.env.LOG_MAX_FILES, 10) }),
+      ...(process.env.LOG_DATE_PATTERN && { datePattern: process.env.LOG_DATE_PATTERN })
     },
 
     features: {
@@ -281,7 +290,7 @@ function createConfig(): ServerConfig {
     config.ssl = {
       certPath: process.env.SSL_CERT_PATH,
       keyPath: process.env.SSL_KEY_PATH,
-      caPath: process.env.SSL_CA_PATH
+      ...(process.env.SSL_CA_PATH && { caPath: process.env.SSL_CA_PATH })
     };
   }
 

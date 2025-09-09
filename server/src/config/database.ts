@@ -1,7 +1,8 @@
 import { Pool, PoolClient, PoolConfig } from 'pg';
 import * as fs from 'fs';
 import * as path from 'path';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
+import { config } from './environment';
 
 export interface DatabaseConfig extends PoolConfig {
   host: string;
@@ -16,20 +17,20 @@ export interface DatabaseConfig extends PoolConfig {
   connectionTimeoutMillis: number;
 }
 
-// Database configuration from environment variables
+// Database configuration from environment config
 const dbConfig: DatabaseConfig = {
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-  database: process.env.DB_NAME || 'messaging_app',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || '',
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: parseInt(process.env.DB_POOL_MAX || '20', 10), // Maximum connections in pool
-  min: parseInt(process.env.DB_POOL_MIN || '2', 10), // Minimum connections in pool
-  idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT || '30000', 10), // 30 seconds
-  connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT || '10000', 10), // 10 seconds
-  query_timeout: parseInt(process.env.DB_QUERY_TIMEOUT || '60000', 10), // 60 seconds
-  statement_timeout: parseInt(process.env.DB_STATEMENT_TIMEOUT || '60000', 10), // 60 seconds
+  host: config.database.host,
+  port: config.database.port,
+  database: config.database.database,
+  user: config.database.user,
+  password: config.database.password,
+  ssl: config.database.ssl,
+  max: config.database.pool.max,
+  min: config.database.pool.min,
+  idleTimeoutMillis: config.database.pool.idleTimeoutMillis,
+  connectionTimeoutMillis: config.database.pool.connectionTimeoutMillis,
+  query_timeout: config.database.pool.queryTimeoutMillis,
+  statement_timeout: config.database.pool.statementTimeoutMillis,
 };
 
 // Create the connection pool
@@ -38,7 +39,6 @@ export const pool = new Pool(dbConfig);
 // Pool event handlers for monitoring and logging
 pool.on('connect', (client: PoolClient) => {
   logger.debug('Database client connected', {
-    processId: client.processID,
     totalCount: pool.totalCount,
     idleCount: pool.idleCount,
     waitingCount: pool.waitingCount
@@ -47,7 +47,6 @@ pool.on('connect', (client: PoolClient) => {
 
 pool.on('acquire', (client: PoolClient) => {
   logger.debug('Database client acquired from pool', {
-    processId: client.processID,
     totalCount: pool.totalCount,
     idleCount: pool.idleCount,
     waitingCount: pool.waitingCount
@@ -56,7 +55,6 @@ pool.on('acquire', (client: PoolClient) => {
 
 pool.on('remove', (client: PoolClient) => {
   logger.debug('Database client removed from pool', {
-    processId: client.processID,
     totalCount: pool.totalCount,
     idleCount: pool.idleCount,
     waitingCount: pool.waitingCount
@@ -66,8 +64,7 @@ pool.on('remove', (client: PoolClient) => {
 pool.on('error', (err: Error, client?: PoolClient) => {
   logger.error('Unexpected database pool error', {
     error: err.message,
-    stack: err.stack,
-    processId: client?.processID || 'unknown'
+    stack: err.stack
   });
   
   // Don't exit the application on pool errors

@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthenticatedRequest, JWTPayload, UserProfile, ActiveSession } from '@/types';
-import { AuthService } from '@/services/AuthService';
-import { logger } from '@/utils/logger';
-import { setSecurityHeaders, logSecurityEvent } from '@/utils/validation';
+import { AuthenticatedRequest, JWTPayload, UserProfile, ActiveSession } from '../types/index';
+import { AuthService } from '../services/AuthService';
+import { logger } from '../utils/logger';
+import { setSecurityHeaders, logSecurityEvent } from '../utils/validation';
 
 /**
  * Extract JWT token from request headers
