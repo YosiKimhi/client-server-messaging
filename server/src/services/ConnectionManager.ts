@@ -362,6 +362,24 @@ export class ConnectionManager extends EventEmitter {
   }
 
   /**
+   * Get active connection count (for monitoring)
+   */
+  public getActiveConnectionCount(): number {
+    return this.getTotalConnectionCount();
+  }
+
+  /**
+   * Check if the connection manager is healthy
+   */
+  public isHealthy(): boolean {
+    const totalConnections = this.getTotalConnectionCount();
+    const isWithinLimits = totalConnections < this.MAX_CONNECTIONS;
+    const hasCleanupInterval = !!this.cleanupInterval;
+    
+    return isWithinLimits && hasCleanupInterval;
+  }
+
+  /**
    * Send message to SSE connection
    */
   public sendSSEMessage(response: Response, type: string, data: any): boolean {

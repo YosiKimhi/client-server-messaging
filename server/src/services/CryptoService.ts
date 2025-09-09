@@ -53,7 +53,7 @@ export class CryptoService {
       const iv = crypto.randomBytes(16);     // 128-bit IV
 
       // Encrypt message with AES-256-CBC
-      const cipher = crypto.createCipher('aes-256-cbc', aesKey);
+      const cipher = crypto.createCipheriv('aes-256-cbc', aesKey, iv);
       cipher.setAutoPadding(true);
       let encryptedData = cipher.update(message, 'utf8', 'base64');
       encryptedData += cipher.final('base64');
@@ -83,7 +83,8 @@ export class CryptoService {
       const aesKey = rsa.decrypt(encryptedMessage.encryptedKey, 'buffer');
       
       // Decrypt message with AES
-      const decipher = crypto.createDecipher('aes-256-cbc', aesKey);
+      const iv = Buffer.from(encryptedMessage.iv, 'base64');
+      const decipher = crypto.createDecipheriv('aes-256-cbc', aesKey, iv);
       decipher.setAutoPadding(true);
       let decrypted = decipher.update(encryptedMessage.encryptedData, 'base64', 'utf8');
       decrypted += decipher.final('utf8');

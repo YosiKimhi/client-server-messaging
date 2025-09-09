@@ -22,7 +22,7 @@ const rateLimitStore: RateLimitStore = {};
 function cleanupExpiredEntries(): void {
   const now = Date.now();
   for (const key in rateLimitStore) {
-    if (rateLimitStore[key].resetTime < now) {
+    if (rateLimitStore[key] && rateLimitStore[key].resetTime < now) {
       delete rateLimitStore[key];
     }
   }
@@ -414,7 +414,7 @@ export class CustomRateLimiter {
           ip: req.ip
         });
 
-        return res.status(429).json({
+        res.status(429).json({
           error: {
             message: 'Rate limit exceeded',
             code: 'RATE_LIMIT_EXCEEDED',
@@ -424,6 +424,7 @@ export class CustomRateLimiter {
           path: req.path,
           method: req.method
         });
+        return;
       }
 
       next();

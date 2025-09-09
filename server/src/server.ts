@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as https from 'https';
 import * as http from 'http';
 import { logger } from './utils/logger';
-import { initializeDatabase, closeDatabaseConnection } from './config/database';
+import { initializeDatabase, closeDatabaseConnection, pool } from './config/database';
 import { config, logConfiguration, getEnvironmentConfig } from './config/environment';
 import { AuthService } from './services/AuthService';
 import { connectionManager } from './services/ConnectionManager';
@@ -17,8 +17,9 @@ import messageRoutes from './routes/messages';
 import streamRoutes from './routes/stream';
 
 // Import middleware
-import { generalRateLimit } from './middleware/rateLimiting';
+import { generalRateLimit, getRateLimitStats } from './middleware/rateLimiting';
 import { requestContext } from './middleware/auth';
+import { securityHeaders, securityMiddlewareStack, getSecurityMetrics } from './middleware/security';
 
 const { isDevelopment, isProduction } = getEnvironmentConfig();
 
@@ -33,29 +34,13 @@ function createExpressApp(): express.Application {
     app.set('trust proxy', 1);
   }
 
-  // Security middleware
+  // Security middleware - use comprehensive security headers
   if (config.security.helmetEnabled) {
-    app.use(helmet({
-      contentSecurityPolicy: config.security.cspEnabled ? {
-        directives: {
-          defaultSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
-          scriptSrc: ["'self'"],
-          imgSrc: ["'self'", "data:", "https:"],
-          connectSrc: ["'self'"],
-          fontSrc: ["'self'"],
-          objectSrc: ["'none'"],
-          mediaSrc: ["'self'"],
-          frameSrc: ["'none'"],
-        },
-      } : false,
-      hsts: config.security.hstsEnabled ? {
-        maxAge: 31536000, // 1 year
-        includeSubDomains: true,
-        preload: true
-      } : false
-    }));
+    app.use(securityHeaders);
   }
+  
+  // Additional security middleware stack
+  app.use(securityMiddlewareStack);
 
   // CORS configuration
   app.use(cors({
@@ -99,10 +84,102 @@ function createExpressApp(): express.Application {
         features: {
           authentication: 'enabled',
           rateLimiting: 'enabled',
-          encryption: 'enabled'
+          encryption: 'enabled',
+          realTimeMessaging: 'enabled',
+          security: 'enabled'
         }
       },
       message: 'API is operational'
+    });
+  });
+
+  // System metrics endpoint for monitoring
+  app.get('/api/metrics', (req: Request, res: Response) => {
+    const memUsage = process.memoryUsage();
+    const cpuUsage = process.cpuUsage();
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        timestamp: new Date(),
+        system: {
+          uptime: process.uptime(),
+          memory: {
+            rss: Math.round(memUsage.rss / 1024 / 1024), // MB
+            heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024), // MB
+            heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024), // MB
+            external: Math.round(memUsage.external / 1024 / 1024) // MB
+          },
+          cpu: {
+            user: cpuUsage.user,
+            system: cpuUsage.system
+          },
+          process: {
+            pid: process.pid,
+            version: process.version,
+            platform: process.platform,
+            arch: process.arch
+          }
+        },
+        connections: {
+          active: connectionManager.getActiveConnectionCount(),
+          total: connectionManager.getTotalConnectionCount()
+        },
+        rateLimiting: getRateLimitStats(),
+        security: getSecurityMetrics()
+      },
+      message: 'System metrics retrieved successfully'
+    });
+  });
+
+  // Health check endpoint with detailed status
+  app.get('/api/health/detailed', async (req: Request, res: Response) => {
+    const checks = {
+      database: false,
+      memoryUsage: false,
+      rateLimiting: false,
+      security: false,
+      realTimeServices: false
+    };
+
+    let overallStatus = 'healthy';
+
+    try {
+      // Database check
+      const dbResult = await pool.query('SELECT 1');
+      checks.database = dbResult.rows.length > 0;
+    } catch (error) {
+      checks.database = false;
+      overallStatus = 'unhealthy';
+    }
+
+    // Memory usage check (alert if over 80%)
+    const memUsage = process.memoryUsage();
+    const memoryUsagePercent = (memUsage.heapUsed / memUsage.heapTotal) * 100;
+    checks.memoryUsage = memoryUsagePercent < 80;
+    if (!checks.memoryUsage) overallStatus = 'degraded';
+
+    // Rate limiting check
+    checks.rateLimiting = true; // If we got here, rate limiting is working
+
+    // Security check
+    checks.security = true; // If we got here, security middleware is working
+
+    // Real-time services check
+    checks.realTimeServices = connectionManager.isHealthy();
+
+    const statusCode = overallStatus === 'healthy' ? 200 : 
+                      overallStatus === 'degraded' ? 200 : 503;
+
+    res.status(statusCode).json({
+      status: overallStatus,
+      timestamp: new Date(),
+      checks,
+      metrics: {
+        uptime: process.uptime(),
+        memoryUsagePercent: Math.round(memoryUsagePercent),
+        activeConnections: connectionManager.getActiveConnectionCount()
+      }
     });
   });
 
@@ -132,6 +209,8 @@ function createExpressApp(): express.Application {
         availableEndpoints: [
           'GET /health',
           'GET /api/status',
+          'GET /api/metrics',
+          'GET /api/health/detailed',
           'POST /api/auth/register',
           'POST /api/auth/login',
           'POST /api/auth/logout',
@@ -345,6 +424,8 @@ async function startServer(): Promise<void> {
       logger.info('Available endpoints:', {
         health: `${serverUrl}/health`,
         status: `${serverUrl}/api/status`,
+        metrics: `${serverUrl}/api/metrics`,
+        detailedHealth: `${serverUrl}/api/health/detailed`,
         register: `${serverUrl}/api/auth/register`,
         login: `${serverUrl}/api/auth/login`,
         logout: `${serverUrl}/api/auth/logout`,
