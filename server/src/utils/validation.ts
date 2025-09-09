@@ -85,10 +85,10 @@ export const validateEmail = (): ValidationChain => {
 // Password validation rules
 export const validatePassword = (): ValidationChain => {
   return body('password')
-    .isLength({ min: 8, max: 128 })
-    .withMessage('Password must be between 8 and 128 characters')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
-    .withMessage('Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character (@$!%*?&)')
+    .isLength({ min: 6, max: 128 })
+    .withMessage('Password must be between 6 and 128 characters')
+    .matches(/^(?=.*[a-zA-Z])(?=.*\d)/)
+    .withMessage('Password must contain at least one letter and one number')
     .custom((value: string) => {
       // Check for common weak passwords
       const commonPasswords = [
@@ -98,15 +98,6 @@ export const validatePassword = (): ValidationChain => {
       
       if (commonPasswords.some(weak => value.toLowerCase().includes(weak))) {
         throw new Error('Password contains common weak patterns');
-      }
-      
-      // Check for sequences and repetitions
-      if (/(.)\1{2,}/.test(value)) {
-        throw new Error('Password cannot contain repeated characters');
-      }
-      
-      if (/(?:abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz|012|123|234|345|456|567|678|789)/i.test(value)) {
-        throw new Error('Password cannot contain sequential characters');
       }
       
       return true;

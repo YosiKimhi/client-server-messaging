@@ -75,41 +75,22 @@ const Register: React.FC = () => {
       return false
     }
     
-    // Enhanced password validation matching server requirements
-    if (formData.password.length < 8) {
-      setError('Password must be at least 8 characters long')
+    // Simplified password validation for easier demo usage
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters long')
       return false
     }
     
-    const hasLowercase = /[a-z]/.test(formData.password)
-    const hasUppercase = /[A-Z]/.test(formData.password)
+    const hasLetter = /[a-zA-Z]/.test(formData.password)
     const hasNumber = /[0-9]/.test(formData.password)
-    const hasSpecialChar = /[@$!%*?&]/.test(formData.password)
     
-    if (!hasLowercase) {
-      setError('Password must contain at least one lowercase letter')
-      return false
-    }
-    
-    if (!hasUppercase) {
-      setError('Password must contain at least one uppercase letter')
+    if (!hasLetter) {
+      setError('Password must contain at least one letter')
       return false
     }
     
     if (!hasNumber) {
       setError('Password must contain at least one number')
-      return false
-    }
-    
-    if (!hasSpecialChar) {
-      setError('Password must contain at least one special character (@$!%*?&)')
-      return false
-    }
-    
-    // Check for repeated characters
-    const hasRepeatedChars = /(..).*\1/.test(formData.password)
-    if (hasRepeatedChars) {
-      setError('Password cannot contain repeated character sequences')
       return false
     }
     
@@ -271,7 +252,7 @@ const Register: React.FC = () => {
             helperText={
               error.includes('Password') && !error.includes('match') 
                 ? '' 
-                : 'Must be 8+ chars with uppercase, lowercase, number, and special char (@$!%*?&)'
+                : 'Must be 6+ characters with at least one letter and one number'
             }
           />
 
