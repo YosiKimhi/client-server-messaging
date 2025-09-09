@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Paper,
   TextField,
@@ -8,16 +8,29 @@ import {
   Link,
   Alert
 } from '@mui/material'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+import { ApiError } from '../services/authService'
 
 const Login: React.FC = () => {
   const navigate = useNavigate()
+  const location = useLocation()
+  const { login, isAuthenticated } = useAuth()
+  
   const [formData, setFormData] = useState({
     username: '',
     password: ''
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      const from = location.state?.from?.pathname || '/chat'
+      navigate(from, { replace: true })
+    }
+  }, [isAuthenticated, navigate, location])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -27,19 +40,40 @@ const Login: React.FC = () => {
     setError('')
   }
 
+  const validateForm = () => {
+    if (!formData.username.trim()) {
+      setError('Username is required')
+      return false
+    }
+    if (!formData.password) {
+      setError('Password is required')
+      return false
+    }
+    return true
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!validateForm()) {
+      return
+    }
+
     setLoading(true)
     setError('')
     
     try {
-      // TODO: Implement authentication logic
-      console.log('Login attempt:', formData)
-      // Placeholder for authentication
-      // On successful login, navigate to chat
-      // navigate('/chat')
+      await login({
+        username: formData.username.trim(),
+        password: formData.password
+      })
+      
+      // Navigation will be handled by the useEffect above
+      // when isAuthenticated becomes true
+      
     } catch (err) {
-      setError('Login failed. Please check your credentials.')
+      const error = err as ApiError
+      setError(error.message || 'Login failed. Please check your credentials.')
     } finally {
       setLoading(false)
     }
@@ -83,6 +117,8 @@ const Login: React.FC = () => {
             onChange={handleChange}
             margin="normal"
             autoComplete="username"
+            disabled={loading}
+            error={error.includes('Username')}
           />
           
           <TextField
@@ -95,6 +131,8 @@ const Login: React.FC = () => {
             onChange={handleChange}
             margin="normal"
             autoComplete="current-password"
+            disabled={loading}
+            error={error.includes('Password')}
           />
 
           <Button
@@ -117,6 +155,7 @@ const Login: React.FC = () => {
                   e.preventDefault()
                   navigate('/register')
                 }}
+                disabled={loading}
               >
                 Sign up here
               </Link>

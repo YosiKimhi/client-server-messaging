@@ -1,6 +1,7 @@
 import React from 'react'
-import { AppBar, Toolbar, Typography, Container, Box } from '@mui/material'
-import { useLocation } from 'react-router-dom'
+import { AppBar, Toolbar, Typography, Container, Box, Button } from '@mui/material'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -8,6 +9,8 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { isAuthenticated, user, logout } = useAuth()
   
   const getPageTitle = () => {
     switch (location.pathname) {
@@ -22,6 +25,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     }
   }
 
+  const handleLogout = async () => {
+    try {
+      await logout()
+      navigate('/login', { replace: true })
+    } catch (error) {
+      console.error('Logout error:', error)
+      // Navigate to login even if logout API fails
+      navigate('/login', { replace: true })
+    }
+  }
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <AppBar position="static">
@@ -29,6 +43,22 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             {getPageTitle()}
           </Typography>
+          
+          {isAuthenticated && user && (
+            <>
+              <Typography variant="body2" sx={{ mr: 2 }}>
+                Welcome, {user.username}
+              </Typography>
+              <Button 
+                color="inherit" 
+                onClick={handleLogout}
+                variant="outlined"
+                size="small"
+              >
+                Logout
+              </Button>
+            </>
+          )}
         </Toolbar>
       </AppBar>
       
