@@ -8,10 +8,13 @@ import { logger } from './utils/logger';
 import { initializeDatabase, closeDatabaseConnection } from './config/database';
 import { config, logConfiguration, getEnvironmentConfig } from './config/environment';
 import { AuthService } from './services/AuthService';
+import { connectionManager } from './services/ConnectionManager';
+import { broadcastService } from './services/BroadcastService';
 
 // Import routes
 import authRoutes from './routes/auth';
 import messageRoutes from './routes/messages';
+import streamRoutes from './routes/stream';
 
 // Import middleware
 import { generalRateLimit } from './middleware/rateLimiting';
@@ -108,6 +111,9 @@ function createExpressApp(): express.Application {
   
   // Mount message routes
   app.use('/api/messages', messageRoutes);
+  
+  // Mount streaming routes for real-time communication
+  app.use('/api/stream', streamRoutes);
 
   // 404 handler for unknown routes
   app.use('*', (req: Request, res: Response) => {
@@ -137,7 +143,13 @@ function createExpressApp(): express.Application {
           'GET /api/messages/history',
           'GET /api/messages/:id',
           'DELETE /api/messages/:id',
-          'GET /api/messages/stats'
+          'GET /api/messages/stats',
+          'GET /api/stream/events (SSE)',
+          'GET /api/stream/poll (Long Polling)',
+          'GET /api/stream/status',
+          'POST /api/stream/disconnect',
+          'POST /api/stream/test',
+          'GET /api/stream/admin/stats'
         ]
       },
       timestamp: new Date(),
@@ -236,10 +248,14 @@ function setupGracefulShutdown(server: http.Server | https.Server): void {
           error: error.message 
         });
         process.exit(1);
-        return;
       }
       
       try {
+        // Close real-time communication services
+        logger.info('Shutting down real-time services...');
+        connectionManager.shutdown();
+        broadcastService.shutdown();
+        
         // Close database connections
         logger.info('Closing database connections...');
         await closeDatabaseConnection();
@@ -325,7 +341,7 @@ async function startServer(): Promise<void> {
         processId: process.pid
       });
       
-      logger.info('BE-004: Core Message System - COMPLETE');
+      logger.info('BE-005: Real-Time Communication - COMPLETE');
       logger.info('Available endpoints:', {
         health: `${serverUrl}/health`,
         status: `${serverUrl}/api/status`,
@@ -340,13 +356,22 @@ async function startServer(): Promise<void> {
         messageHistory: `${serverUrl}/api/messages/history`,
         messageById: `${serverUrl}/api/messages/:id`,
         messageDelete: `${serverUrl}/api/messages/:id`,
-        messageStats: `${serverUrl}/api/messages/stats`
+        messageStats: `${serverUrl}/api/messages/stats`,
+        sseStream: `${serverUrl}/api/stream/events`,
+        longPolling: `${serverUrl}/api/stream/poll`,
+        streamStatus: `${serverUrl}/api/stream/status`,
+        streamDisconnect: `${serverUrl}/api/stream/disconnect`,
+        streamTest: `${serverUrl}/api/stream/test`,
+        adminStats: `${serverUrl}/api/stream/admin/stats`
       });
       
       if (isDevelopment) {
         logger.info('Development mode notes:', {
-          message: 'Core messaging system is ready for testing',
-          features: 'Authentication, message encryption, audit logging enabled',
+          message: 'Real-time messaging system is ready for testing',
+          features: 'Authentication, message encryption, real-time communication, audit logging enabled',
+          realTime: 'Server-Sent Events (SSE) and Long Polling available',
+          connections: 'Supports up to 15,000 concurrent connections',
+          broadcasting: 'Message broadcasting to all connected clients',
           rateLimits: 'Rate limiting is active - check logs for details',
           security: 'Security headers and CORS are configured',
           database: 'Database migrations have been applied',

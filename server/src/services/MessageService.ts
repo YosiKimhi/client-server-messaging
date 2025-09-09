@@ -4,6 +4,7 @@ import { cryptoService } from './CryptoService';
 import { logAuditEvent } from '../models/AuditLog';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { broadcastService } from './BroadcastService';
 
 export interface SendMessageOptions {
   sender_id: string;
@@ -143,6 +144,36 @@ export class MessageService {
         recipientId: recipient_id,
         contentLength: content.length
       });
+
+      // If this is a broadcast message, add it to the broadcast queue
+      if (is_broadcast) {
+        const messageData: Message = {
+          id: messageResponse.id,
+          sender_id: messageResponse.sender_id,
+          encrypted_content: messageResponse.encrypted_content,
+          aes_key_encrypted: messageResponse.aes_key_encrypted,
+          message_hash: messageResponse.message_hash,
+          timestamp: messageResponse.timestamp,
+          message_type: messageResponse.message_type as 'text' | 'system' | 'notification',
+          is_broadcast: true,
+          recipient_id: undefined,
+          metadata: messageResponse.metadata,
+          created_at: messageResponse.timestamp
+        };
+
+        const senderProfile = {
+          id: sender.id,
+          username: sender.username,
+          email: '', // Not needed for broadcasting
+          public_key: sender.public_key,
+          is_active: true,
+          created_at: new Date(),
+          last_login: new Date()
+        };
+
+        // Broadcast the message to all connected clients
+        await broadcastService.broadcastMessage(messageData, senderProfile);
+      }
 
       return messageResponse;
 
