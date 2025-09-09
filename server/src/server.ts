@@ -11,6 +11,7 @@ import { AuthService } from './services/AuthService';
 
 // Import routes
 import authRoutes from './routes/auth';
+import messageRoutes from './routes/messages';
 
 // Import middleware
 import { generalRateLimit } from './middleware/rateLimiting';
@@ -104,6 +105,9 @@ function createExpressApp(): express.Application {
 
   // Mount authentication routes
   app.use('/api/auth', authRoutes);
+  
+  // Mount message routes
+  app.use('/api/messages', messageRoutes);
 
   // 404 handler for unknown routes
   app.use('*', (req: Request, res: Response) => {
@@ -128,7 +132,12 @@ function createExpressApp(): express.Application {
           'GET /api/auth/profile',
           'GET /api/auth/session',
           'POST /api/auth/refresh',
-          'GET /api/auth/keys'
+          'GET /api/auth/keys',
+          'POST /api/messages/send',
+          'GET /api/messages/history',
+          'GET /api/messages/:id',
+          'DELETE /api/messages/:id',
+          'GET /api/messages/stats'
         ]
       },
       timestamp: new Date(),
@@ -316,7 +325,7 @@ async function startServer(): Promise<void> {
         processId: process.pid
       });
       
-      logger.info('Hour 4-8: Authentication System - COMPLETE');
+      logger.info('BE-004: Core Message System - COMPLETE');
       logger.info('Available endpoints:', {
         health: `${serverUrl}/health`,
         status: `${serverUrl}/api/status`,
@@ -326,15 +335,22 @@ async function startServer(): Promise<void> {
         profile: `${serverUrl}/api/auth/profile`,
         session: `${serverUrl}/api/auth/session`,
         refresh: `${serverUrl}/api/auth/refresh`,
-        keys: `${serverUrl}/api/auth/keys`
+        keys: `${serverUrl}/api/auth/keys`,
+        messageSend: `${serverUrl}/api/messages/send`,
+        messageHistory: `${serverUrl}/api/messages/history`,
+        messageById: `${serverUrl}/api/messages/:id`,
+        messageDelete: `${serverUrl}/api/messages/:id`,
+        messageStats: `${serverUrl}/api/messages/stats`
       });
       
       if (isDevelopment) {
         logger.info('Development mode notes:', {
-          message: 'Authentication system is ready for testing',
+          message: 'Core messaging system is ready for testing',
+          features: 'Authentication, message encryption, audit logging enabled',
           rateLimits: 'Rate limiting is active - check logs for details',
           security: 'Security headers and CORS are configured',
-          database: 'Database migrations have been applied'
+          database: 'Database migrations have been applied',
+          encryption: 'Messages are encrypted before storage with RSA+AES'
         });
       }
     });
