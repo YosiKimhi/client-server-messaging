@@ -1,3 +1,5 @@
+import { Request } from 'express';
+
 // Database entity types
 export interface User {
   id: string;
@@ -33,8 +35,8 @@ export interface ActiveSession {
   session_token: string;
   expires_at: Date;
   last_activity: Date;
-  ip_address?: string;
-  user_agent?: string;
+  ip_address?: string | undefined;
+  user_agent?: string | undefined;
   is_active: boolean;
   created_at: Date;
 }
@@ -115,7 +117,7 @@ export interface UserProfile {
 }
 
 // Middleware types
-export interface AuthenticatedRequest extends Express.Request {
+export interface AuthenticatedRequest extends Request {
   user?: UserProfile;
   session?: ActiveSession;
 }

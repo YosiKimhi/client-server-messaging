@@ -2,7 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- for every task or request on this projects pick the best agent for the task! think who whould solve of implement the task in the must efficient way, and then let him do the task צמ 
+- for every task or request on this projects pick the best agent for the task! think who whould solve of implement the task in the must efficient way, and then let him do the task 
+- do only the task said. dont do extra work without suggets first
+- keep it clean and simple
 
 ## Project Overview
 
