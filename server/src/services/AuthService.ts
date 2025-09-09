@@ -267,7 +267,7 @@ export class AuthService {
           is_active: result.user.is_active,
           created_at: result.user.created_at,
           updated_at: result.user.updated_at,
-          last_login: result.user.last_login
+          ...(result.user.last_login && { last_login: result.user.last_login })
         },
         token,
         expires_at: result.session.expires_at
