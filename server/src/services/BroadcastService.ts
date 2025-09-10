@@ -59,9 +59,10 @@ export class BroadcastService extends EventEmitter {
       const broadcastData = {
         id: message.id,
         sender_id: message.sender_id,
-        sender_username: senderProfile.username,
+        username: senderProfile.username, // Client expects 'username' not 'sender_username'
+        content: '', // No plain content stored - client will decrypt if needed
         encrypted_content: message.encrypted_content,
-        aes_key_encrypted: message.aes_key_encrypted,
+        iv: message.aes_key_encrypted, // Map aes_key_encrypted to iv for client compatibility
         message_hash: message.message_hash,
         timestamp: message.timestamp,
         message_type: message.message_type,
@@ -71,7 +72,7 @@ export class BroadcastService extends EventEmitter {
       await this.queueBroadcast({
         type: 'message',
         data: broadcastData,
-        excludeUsers: [message.sender_id], // Don't send back to sender
+        // Don't exclude sender - they should see their own messages in real-time
         priority: 'high'
       });
 

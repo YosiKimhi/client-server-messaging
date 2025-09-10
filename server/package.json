@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "migrate": "ts-node src/scripts/migrate.ts",
     "seed": "ts-node src/scripts/seed.ts",
+    "clear-messages": "ts-node src/scripts/clear-messages.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint src/**/*.ts",

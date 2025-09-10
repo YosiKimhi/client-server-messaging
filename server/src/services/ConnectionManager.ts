@@ -106,13 +106,15 @@ export class ConnectionManager extends EventEmitter {
       user_agent
     };
 
-    // Set up SSE headers
+    // Set up SSE headers with proper CORS configuration
+    const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
     response.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control',
+      'Access-Control-Allow-Origin': corsOrigin,
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Allow-Headers': 'Cache-Control, Authorization, Content-Type',
       'X-Accel-Buffering': 'no' // Disable nginx buffering
     });
 

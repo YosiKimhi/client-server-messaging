@@ -8,7 +8,9 @@ import { broadcastService } from './BroadcastService';
 
 export interface SendMessageOptions {
   sender_id: string;
-  content: string;
+  content?: string;
+  encrypted_content?: string;
+  iv?: string;
   message_type?: 'text' | 'system' | 'notification';
   recipient_id?: string;
   metadata?: Record<string, any>;
@@ -31,9 +33,13 @@ export class MessageService {
    * Send a message with encryption and audit logging
    */
   public static async sendMessage(options: SendMessageOptions): Promise<MessageResponse> {
+    console.log('📥 MessageService.sendMessage called with:', JSON.stringify(options, null, 2));
+    
     const {
       sender_id,
       content,
+      encrypted_content,
+      iv,
       message_type = 'text',
       recipient_id,
       metadata = {},
@@ -54,16 +60,30 @@ export class MessageService {
 
       const sender = senderResult.rows[0];
 
+      // Determine what content to use for hashing and storage
+      const contentForStorage = content || encrypted_content;
+      
+      if (!contentForStorage) {
+        throw new Error('Message content is required - either content or encrypted_content must be provided');
+      }
+      
       // Create message hash for integrity verification
-      const messageHash = cryptoService.hash(content + sender_id + Date.now());
+      const messageHash = cryptoService.hash(contentForStorage + sender_id + Date.now());
 
-      // Encrypt the message content for storage
-      const encryptedContent = cryptoService.encryptForStorage(content);
+      // Handle encryption based on whether client provided encrypted content
+      let encryptedContent: string;
+      let encryptedAesKey: string;
 
-      // For broadcast messages, we need to encrypt the AES key for all users
-      // For now, we'll store a server-encrypted version and handle individual encryption in real-time
-      const serverAesKey = cryptoService.generateSecureToken(32); // Generate AES key
-      const encryptedAesKey = cryptoService.encryptForStorage(serverAesKey); // Encrypt with server key
+      if (encrypted_content && iv) {
+        // Client provided encrypted content - store as-is for client-to-client encryption
+        encryptedContent = encrypted_content;
+        encryptedAesKey = iv; // Store the client's IV in aes_key_encrypted field
+      } else {
+        // No client encryption - apply server-side encryption
+        encryptedContent = cryptoService.encryptForStorage(contentForStorage);
+        const serverAesKey = cryptoService.generateSecureToken(32);
+        encryptedAesKey = cryptoService.encryptForStorage(serverAesKey);
+      }
 
       const messageId = uuidv4();
       const timestamp = new Date();
@@ -110,12 +130,18 @@ export class MessageService {
         id: result.id,
         sender_id: result.sender_id,
         sender_username: result.sender_username,
-        encrypted_content: result.encrypted_content,
+        encrypted_content: result.encrypted_content, // Server-encrypted for storage
         aes_key_encrypted: result.aes_key_encrypted,
         message_hash: result.message_hash,
         timestamp: result.timestamp,
         message_type: result.message_type,
-        metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata
+        metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
+        // Include client-side encryption for real-time broadcasting
+        ...(encrypted_content && iv && {
+          client_encrypted_content: encrypted_content,
+          client_iv: iv
+        }),
+        ...(content && { content }) // Include plain content if available
       };
 
       // Log audit event
@@ -124,7 +150,7 @@ export class MessageService {
         message_type,
         is_broadcast,
         recipient_id,
-        content_length: content.length,
+        content_length: contentForStorage.length,
         has_metadata: Object.keys(metadata).length > 0
       }, {
         user_id: sender_id,
@@ -142,7 +168,7 @@ export class MessageService {
         messageType: message_type,
         isBroadcast: is_broadcast,
         recipientId: recipient_id,
-        contentLength: content.length
+        contentLength: contentForStorage.length
       });
 
       // If this is a broadcast message, add it to the broadcast queue
@@ -156,9 +182,9 @@ export class MessageService {
           timestamp: messageResponse.timestamp,
           message_type: messageResponse.message_type as 'text' | 'system' | 'notification',
           is_broadcast: true,
-          recipient_id: undefined,
           metadata: messageResponse.metadata,
           created_at: messageResponse.timestamp
+          // Omit recipient_id for broadcast messages instead of setting to undefined
         };
 
         const senderProfile = {

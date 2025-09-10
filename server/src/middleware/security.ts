@@ -97,12 +97,15 @@ export const customSecurityMiddleware = (req: Request, res: Response, next: Next
  */
 export const corsSecurityMiddleware = (req: Request, res: Response, next: NextFunction): void => {
   const origin = req.get('Origin');
-  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'];
+  // Use CORS_ORIGIN from env (which can be comma-separated) or default to localhost:5173 for development
+  const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+  const allowedOrigins = corsOrigin.includes(',') ? corsOrigin.split(',').map(o => o.trim()) : [corsOrigin];
   
-  // Log suspicious origin requests
+  // Log suspicious origin requests only, don't block them (let the main CORS middleware handle it)
   if (origin && !allowedOrigins.includes(origin)) {
-    logger.warn('Blocked request from unauthorized origin', {
+    logger.warn('Request from origin not in CORS_ORIGIN list', {
       origin,
+      allowedOrigins,
       ip: req.ip,
       userAgent: req.get('User-Agent'),
       path: req.path,

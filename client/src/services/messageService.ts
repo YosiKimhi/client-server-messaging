@@ -14,7 +14,7 @@ export interface Message {
 }
 
 export interface SendMessageRequest {
-  content: string;
+  content?: string;
   encrypted_content?: string;
   iv?: string;
 }
@@ -62,9 +62,12 @@ class MessageService {
       
       if (!response.ok) {
         let errorMessage = 'An error occurred';
+        let errorDetails = {};
         try {
           const errorData = await response.json();
-          errorMessage = errorData.message || errorMessage;
+          errorMessage = errorData.message || errorData.error?.message || errorMessage;
+          errorDetails = errorData;
+          console.error('📋 Server error details:', errorData);
         } catch {
           errorMessage = response.statusText;
         }
@@ -73,6 +76,7 @@ class MessageService {
           message: errorMessage,
           status: response.status,
         };
+        console.error('❌ HTTP Error:', response.status, errorMessage, errorDetails);
         throw error;
       }
 
@@ -90,28 +94,49 @@ class MessageService {
 
   // Send a message
   async sendMessage(content: string, sessionKey?: string): Promise<SendMessageResponse> {
+    console.log('🚨 SENDMESSAGE CALLED! Content:', JSON.stringify(content), 'SessionKey:', !!sessionKey);
     try {
+      console.log('📤 Sending message:', { 
+        contentLength: content.length, 
+        hasSessionKey: !!sessionKey,
+        contentPreview: content.substring(0, 50) + (content.length > 50 ? '...' : '')
+      });
+
       let messageData: SendMessageRequest = { content };
 
       // Encrypt message if session key is provided
       if (sessionKey) {
+        console.log('🔐 Encrypting message with session key...', {
+          content,
+          sessionKey,
+          sessionKeyLength: sessionKey.length
+        });
         const encrypted = encryptMessageForSending(content, sessionKey);
         messageData = {
-          content: '', // Clear text content when encrypted
           encrypted_content: encrypted.encryptedContent,
           iv: encrypted.iv
         };
+        // Don't include content field when sending encrypted data
         this.currentSessionKey = sessionKey;
+        console.log('✅ Message encrypted:', { 
+          encryptedContent: encrypted.encryptedContent.substring(0, 20) + '...',
+          iv: encrypted.iv,
+          ivLength: encrypted.iv.length
+        });
       }
+
+      console.log('🌐 Sending request data:', messageData);
+      console.log('🌐 JSON stringified data:', JSON.stringify(messageData));
 
       const response = await this.makeRequest('/messages/send', {
         method: 'POST',
         body: JSON.stringify(messageData),
       });
 
+      console.log('✅ Message sent successfully:', response);
       return response;
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('❌ Error sending message:', error);
       throw error;
     }
   }
@@ -162,6 +187,7 @@ class MessageService {
 
   // Real-time connection management
   private notifyConnectionStatus(status: 'connected' | 'disconnected' | 'connecting'): void {
+    console.log('🔔 Notifying connection status:', status, 'to', this.connectionStatusListeners.size, 'listeners');
     this.connectionStatusListeners.forEach(listener => listener(status));
   }
 
@@ -169,14 +195,29 @@ class MessageService {
     // Decrypt message if we have session key
     if (this.currentSessionKey && message.encrypted_content && message.iv) {
       try {
+        console.log('🔓 Attempting to decrypt message:', {
+          messageId: message.id,
+          sessionKey: this.currentSessionKey,
+          encryptedContent: message.encrypted_content.substring(0, 20) + '...',
+          iv: message.iv,
+          sessionKeyLength: this.currentSessionKey.length
+        });
+
         const encryptedData: MessageEncryptionData = {
           encryptedContent: message.encrypted_content,
           iv: message.iv,
           timestamp: Date.now()
         };
         message.content = decryptReceivedMessage(encryptedData, this.currentSessionKey);
+        console.log('✅ Successfully decrypted message:', message.content);
       } catch (error) {
-        console.warn('Failed to decrypt received message:', error);
+        console.warn('❌ Failed to decrypt received message:', error);
+        console.log('🔍 Debug info:', {
+          sessionKey: this.currentSessionKey,
+          sessionKeyLength: this.currentSessionKey?.length,
+          encryptedContent: message.encrypted_content,
+          iv: message.iv
+        });
         message.content = '[Encrypted message - unable to decrypt]';
       }
     }
@@ -191,27 +232,85 @@ class MessageService {
     }
 
     const token = authService.getToken();
+    console.log('🔑 Auth token check:', {
+      hasToken: !!token,
+      tokenLength: token?.length || 0,
+      tokenPreview: token ? token.substring(0, 20) + '...' : 'none',
+      isIncognito: this.isIncognitoMode()
+    });
+    
     if (!token) {
+      console.error('❌ No authentication token available');
       throw new Error('Authentication required for real-time connection');
     }
 
+    console.log('🔄 Starting SSE connection...');
     this.notifyConnectionStatus('connecting');
 
     try {
-      this.eventSource = new EventSource(
-        `${API_BASE_URL}/stream/events?token=${encodeURIComponent(token)}`
-      );
+      const sseUrl = `${API_BASE_URL}/stream/events?token=${encodeURIComponent(token)}`;
+      console.log('🌐 SSE URL:', sseUrl);
+      
+      // Test the endpoint first
+      console.log('🧪 Testing SSE endpoint accessibility...');
+      fetch(`${API_BASE_URL}/stream/status`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).then(r => console.log('📊 Stream status endpoint:', r.status, r.ok))
+       .catch(e => console.error('❌ Stream status test failed:', e));
+      
+      this.eventSource = new EventSource(sseUrl);
+      console.log('📡 EventSource created, readyState:', this.eventSource.readyState);
 
       this.eventSource.onopen = () => {
-        console.log('SSE connection opened');
+        console.log('✅ SSE connection opened successfully!');
         this.notifyConnectionStatus('connected');
       };
 
+      // Handle named SSE events
+      this.eventSource.addEventListener('connected', (event) => {
+        console.log('SSE connection confirmed by server:', event.data);
+        this.notifyConnectionStatus('connected');
+      });
+
+      this.eventSource.addEventListener('heartbeat', () => {
+        // Update connection status on heartbeat
+        this.notifyConnectionStatus('connected');
+      });
+
+      this.eventSource.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.notifyNewMessage(data);
+        } catch (error) {
+          console.error('Error parsing message event:', error);
+        }
+      });
+
+      this.eventSource.addEventListener('user_joined', (event) => {
+        console.log('User joined:', event.data);
+      });
+
+      this.eventSource.addEventListener('user_left', (event) => {
+        console.log('User left:', event.data);
+      });
+
+      // Keep the default onmessage handler as fallback for unnamed events
       this.eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          
+          // Handle different event types
           if (data.type === 'message' && data.message) {
             this.notifyNewMessage(data.message);
+          } else if (data.type === 'connected') {
+            console.log('SSE connection confirmed by server (fallback):', data);
+            this.notifyConnectionStatus('connected');
+          } else if (data.type === 'heartbeat') {
+            // Update connection status on heartbeat
+            this.notifyConnectionStatus('connected');
+          } else if (data.type === 'user_joined' || data.type === 'user_left') {
+            // Handle user presence events
+            console.log('User presence update:', data);
           }
         } catch (error) {
           console.error('Error parsing SSE message:', error);
@@ -219,13 +318,15 @@ class MessageService {
       };
 
       this.eventSource.onerror = (error) => {
-        console.error('SSE connection error:', error);
+        console.error('❌ SSE connection error:', error);
+        console.error('📊 SSE readyState:', this.eventSource?.readyState);
+        console.error('📋 EventSource states:', { CONNECTING: EventSource.CONNECTING, OPEN: EventSource.OPEN, CLOSED: EventSource.CLOSED });
         this.notifyConnectionStatus('disconnected');
         
         // Attempt to reconnect after 3 seconds
         setTimeout(() => {
           if (this.eventSource?.readyState === EventSource.CLOSED) {
-            console.log('Attempting to reconnect SSE...');
+            console.log('🔄 Attempting to reconnect SSE...');
             this.connectSSE();
           }
         }, 3000);
@@ -269,6 +370,7 @@ class MessageService {
       this.stopPolling();
     }
 
+    console.log('🔄 Starting polling with interval:', interval);
     this.isPolling = true;
     this.notifyConnectionStatus('connecting');
 
@@ -277,13 +379,16 @@ class MessageService {
     }, interval);
 
     // Initial poll
+    console.log('📊 Running initial poll...');
     this.pollMessages().then(() => {
+      console.log('✅ Initial poll successful - setting status to connected');
       this.notifyConnectionStatus('connected');
-    }).catch(() => {
+    }).catch((error) => {
+      console.error('❌ Initial poll failed:', error);
       this.notifyConnectionStatus('disconnected');
     });
 
-    console.log('Started message polling with interval:', interval);
+    console.log('🕐 Started message polling with interval:', interval);
   }
 
   stopPolling(): void {
@@ -319,8 +424,52 @@ class MessageService {
   isConnected(): boolean {
     return !!(this.eventSource?.readyState === EventSource.OPEN || this.isPolling);
   }
+
+  // Detect incognito mode
+  private isIncognitoMode(): boolean {
+    try {
+      // Check if localStorage throws an error (common in incognito)
+      localStorage.setItem('test', 'test');
+      localStorage.removeItem('test');
+      
+      // Check for reduced storage quota (another incognito indicator)
+      if ('storage' in navigator && 'estimate' in navigator.storage) {
+        return false; // More detailed check could be added here
+      }
+      
+      return false;
+    } catch {
+      return true; // Likely incognito mode
+    }
+  }
 }
 
 // Export singleton instance
 export const messageService = new MessageService();
+
+// Add debug function to global scope
+if (typeof window !== 'undefined') {
+  (window as any).debugMessageService = {
+    status: () => ({
+      isConnected: messageService.isConnected(),
+      eventSourceState: (messageService as any).eventSource?.readyState,
+      isPolling: (messageService as any).isPolling,
+      listeners: {
+        message: (messageService as any).messageListeners.size,
+        status: (messageService as any).connectionStatusListeners.size
+      }
+    }),
+    forceReconnect: () => {
+      console.log('🔌 Force reconnecting...');
+      messageService.disconnect();
+      setTimeout(() => messageService.connectSSE(), 1000);
+    },
+    forcePolling: () => {
+      console.log('🔄 Force polling...');
+      messageService.disconnect();
+      setTimeout(() => messageService.startPolling(), 1000);
+    }
+  };
+}
+
 export default messageService;

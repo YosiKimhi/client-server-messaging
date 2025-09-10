@@ -44,7 +44,7 @@ const Chat: React.FC = () => {
     if (user) {
       loadMessageHistory()
     }
-  }, [user, loadMessageHistory])
+  }, [user]) // Removed loadMessageHistory from dependencies to prevent infinite loop
 
   const handleSendMessage = async (content: string): Promise<boolean> => {
     return await sendMessage(content)
@@ -75,6 +75,11 @@ const Chat: React.FC = () => {
             Secure Chat Room
           </Typography>
           
+          {/* Debug state display */}
+          <Typography variant="caption" sx={{ mr: 2, opacity: 0.7, fontSize: '0.7rem' }}>
+            Debug: {connectionStatus} | {connectionMode}
+          </Typography>
+          
           {/* Connection Status */}
           <Box sx={{ mr: 2 }}>
             <ConnectionStatus
@@ -86,6 +91,22 @@ const Chat: React.FC = () => {
               compact
             />
           </Box>
+
+          {/* Debug reconnect button */}
+          {connectionStatus === 'connecting' && (
+            <IconButton 
+              onClick={() => {
+                console.log('🔄 Manual reconnect triggered');
+                reconnect();
+              }}
+              title="Force Reconnect"
+              color="warning"
+              size="small"
+              sx={{ mr: 1 }}
+            >
+              <RefreshIcon />
+            </IconButton>
+          )}
 
           {/* User info */}
           <Typography variant="body2" sx={{ mr: 2, opacity: 0.8 }}>

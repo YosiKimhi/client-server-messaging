@@ -102,10 +102,20 @@ export class CryptoService {
   public encryptForStorage(data: string): string {
     try {
       const serverKey = process.env.DB_ENCRYPTION_KEY || 'default-server-key-change-in-production';
-      const cipher = crypto.createCipher('aes-256-cbc', serverKey);
+      
+      // Create a proper 32-byte key from the server key
+      const key = crypto.scryptSync(serverKey, 'salt', 32);
+      
+      // Generate a random IV for each encryption
+      const iv = crypto.randomBytes(16);
+      
+      const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
       let encrypted = cipher.update(data, 'utf8', 'base64');
       encrypted += cipher.final('base64');
-      return encrypted;
+      
+      // Prepend IV to encrypted data for storage
+      const ivBase64 = iv.toString('base64');
+      return ivBase64 + ':' + encrypted;
     } catch (error) {
       logger.error('Storage encryption failed:', error);
       throw new Error('Storage encryption failed');
@@ -118,8 +128,22 @@ export class CryptoService {
   public decryptFromStorage(encryptedData: string): string {
     try {
       const serverKey = process.env.DB_ENCRYPTION_KEY || 'default-server-key-change-in-production';
-      const decipher = crypto.createDecipher('aes-256-cbc', serverKey);
-      let decrypted = decipher.update(encryptedData, 'base64', 'utf8');
+      
+      // Split IV and encrypted data
+      const parts = encryptedData.split(':');
+      if (parts.length !== 2 || !parts[0] || !parts[1]) {
+        throw new Error('Invalid encrypted data format');
+      }
+      
+      const ivBase64: string = parts[0];
+      const encrypted: string = parts[1];
+      
+      // Recreate the key (same as encryption)
+      const key = crypto.scryptSync(serverKey, 'salt', 32);
+      const iv = Buffer.from(ivBase64, 'base64');
+      
+      const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+      let decrypted = decipher.update(encrypted, 'base64', 'utf8');
       decrypted += decipher.final('utf8');
       return decrypted;
     } catch (error) {

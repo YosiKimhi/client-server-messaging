@@ -3,7 +3,6 @@ import {
   Box,
   List,
   ListItem,
-  ListItemText,
   Typography,
   Divider,
   Paper,
@@ -71,7 +70,10 @@ const MessageList: React.FC<MessageListProps> = ({
   };
 
   // Get initials from username
-  const getUserInitials = (username: string): string => {
+  const getUserInitials = (username: string | undefined): string => {
+    if (!username || typeof username !== 'string') {
+      return 'U'; // Default to 'U' for unknown user
+    }
     return username
       .split(' ')
       .map(name => name.charAt(0))
@@ -101,7 +103,7 @@ const MessageList: React.FC<MessageListProps> = ({
   };
 
   // Empty state
-  if (messages.length === 0 && !isLoading && !error) {
+  if ((!messages || messages.length === 0) && !isLoading && !error) {
     return (
       <Box
         sx={{
@@ -126,7 +128,7 @@ const MessageList: React.FC<MessageListProps> = ({
   }
 
   // Error state
-  if (error && messages.length === 0) {
+  if (error && (!messages || messages.length === 0)) {
     return (
       <Box
         sx={{
@@ -186,9 +188,9 @@ const MessageList: React.FC<MessageListProps> = ({
       )}
 
       <List sx={{ p: 0 }}>
-        {messages.map((message, index) => {
+        {(messages || []).map((message, index) => {
           const isMe = isMyMessage(message);
-          const showDivider = index < messages.length - 1;
+          const showDivider = index < (messages?.length || 0) - 1;
           const encrypted = isEncrypted(message);
 
           return (
@@ -333,7 +335,7 @@ const MessageList: React.FC<MessageListProps> = ({
       </List>
 
       {/* Error message overlay */}
-      {error && messages.length > 0 && (
+      {error && messages && messages.length > 0 && (
         <Box
           sx={{
             position: 'sticky',

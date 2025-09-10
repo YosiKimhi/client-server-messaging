@@ -30,12 +30,16 @@ router.post('/send', async (req: AuthenticatedRequest, res: express.Response) =>
     }
 
     // Validate request body
-    const { content, message_type, recipient_id, metadata } = req.body;
+    const { content, encrypted_content, iv, message_type, recipient_id, metadata } = req.body;
 
-    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+    // Check for either regular content or encrypted content
+    const hasRegularContent = content && typeof content === 'string' && content.trim().length > 0;
+    const hasEncryptedContent = encrypted_content && typeof encrypted_content === 'string' && iv && typeof iv === 'string';
+
+    if (!hasRegularContent && !hasEncryptedContent) {
       return res.status(400).json({
         error: {
-          message: 'Message content is required and must be a non-empty string',
+          message: 'Message content is required - provide either content or encrypted_content with iv',
           code: 'VALIDATION_ERROR',
           field: 'content'
         },
@@ -45,8 +49,8 @@ router.post('/send', async (req: AuthenticatedRequest, res: express.Response) =>
       } as ApiResponse);
     }
 
-    // Validate message content length (e.g., max 5000 characters)
-    if (content.length > 5000) {
+    // Validate message content length (e.g., max 5000 characters) - only for regular content
+    if (hasRegularContent && content.length > 5000) {
       return res.status(400).json({
         error: {
           message: 'Message content exceeds maximum length of 5000 characters',
@@ -88,23 +92,29 @@ router.post('/send', async (req: AuthenticatedRequest, res: express.Response) =>
       } as ApiResponse);
     }
 
-    // Sanitize content
-    const sanitizedContent = sanitizeString(content, 5000);
-
-    // Get client information for audit logging
-    const clientIp = req.ip;
-    const userAgent = req.headers['user-agent'];
-
-    // Send message using MessageService
-    const messageResponse = await MessageService.sendMessage({
+    // Prepare message data based on whether it's encrypted or not
+    let messageData: any = {
       sender_id: req.user.id,
-      content: sanitizedContent,
       message_type: message_type || 'text',
       recipient_id,
       metadata: metadata || {},
-      ip_address: clientIp,
-      user_agent: userAgent
-    });
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent']
+    };
+
+    if (hasRegularContent) {
+      // Sanitize regular content
+      messageData.content = sanitizeString(content, 5000);
+    } else {
+      // Pass through encrypted content
+      messageData.encrypted_content = encrypted_content;
+      messageData.iv = iv;
+    }
+
+    console.log('🌐 Final messageData being sent to MessageService:', JSON.stringify(messageData, null, 2));
+
+    // Send message using MessageService
+    const messageResponse = await MessageService.sendMessage(messageData);
 
     // Return success response
     return res.status(201).json({

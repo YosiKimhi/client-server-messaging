@@ -5,22 +5,44 @@ import { logger } from '../utils/logger';
 import { setSecurityHeaders, logSecurityEvent } from '../utils/validation';
 
 /**
- * Extract JWT token from request headers
+ * Extract JWT token from request headers or query parameters
  */
-function extractTokenFromHeader(req: Request): string | null {
+function extractToken(req: Request): string | null {
+  // First try to get token from Authorization header (standard approach)
   const authHeader = req.headers.authorization;
   
-  if (!authHeader) {
-    return null;
+  if (authHeader) {
+    // Check for Bearer token format
+    const parts = authHeader.split(' ');
+    if (parts.length === 2 && parts[0] === 'Bearer') {
+      logger.info('Token extracted from Authorization header', {
+        path: req.path,
+        tokenLength: parts[1]?.length || 0
+      });
+      return parts[1] || null;
+    }
   }
 
-  // Check for Bearer token format
-  const parts = authHeader.split(' ');
-  if (parts.length !== 2 || parts[0] !== 'Bearer') {
-    return null;
+  // For SSE connections, try to get token from query parameters
+  // This is necessary since EventSource doesn't support custom headers
+  if (req.query && req.query.token && typeof req.query.token === 'string') {
+    logger.info('Token extracted from query parameters', {
+      path: req.path,
+      tokenLength: req.query.token.length,
+      tokenPreview: req.query.token.substring(0, 20) + '...'
+    });
+    return req.query.token;
   }
 
-  return parts[1] || null;
+  logger.warn('No token found in request', {
+    path: req.path,
+    hasAuthHeader: !!authHeader,
+    hasQueryToken: !!req.query?.token,
+    queryTokenType: typeof req.query?.token,
+    queryKeys: Object.keys(req.query || {})
+  });
+
+  return null;
 }
 
 /**
@@ -35,15 +57,44 @@ export async function authenticate(
     // Set security headers
     setSecurityHeaders(res);
 
-    // Extract token from Authorization header
-    const token = extractTokenFromHeader(req);
+    // Extract token from Authorization header or query parameters (for SSE)
+    const token = extractToken(req);
     
-    if (!token) {
-      logger.debug('Authentication failed: No token provided', {
+    // Debug logging for SSE authentication
+    if (req.path.includes('/stream/events')) {
+      logger.info('SSE Authentication Debug', {
         path: req.path,
         method: req.method,
+        hasAuthHeader: !!req.headers.authorization,
+        hasTokenQuery: !!req.query?.token,
+        tokenLength: token ? token.length : 0,
+        ip: req.ip
+      });
+    }
+    
+    // Debug logging for SSE authentication issues
+    logger.debug('Authentication middleware called', {
+      path: req.path,
+      originalUrl: req.originalUrl,
+      method: req.method,
+      hasAuthHeader: !!req.headers.authorization,
+      hasTokenQuery: !!req.query?.token,
+      tokenLength: token ? token.length : 0,
+      ip: req.ip
+    });
+    
+    if (!token) {
+      logger.warn('Authentication failed: No token provided', {
+        path: req.path,
+        originalUrl: req.originalUrl,
+        method: req.method,
         ip: req.ip,
-        userAgent: req.get('User-Agent')
+        userAgent: req.get('User-Agent'),
+        authHeader: req.headers.authorization ? 'present' : 'missing',
+        queryToken: req.query?.token ? 'present' : 'missing',
+        queryTokenType: typeof req.query?.token,
+        queryTokenLength: req.query?.token ? String(req.query.token).length : 0,
+        isSSERequest: req.path.includes('/stream/events')
       });
       
       res.status(401).json({
@@ -206,8 +257,8 @@ export async function optionalAuthenticate(
     // Set security headers
     setSecurityHeaders(res);
 
-    // Extract token from Authorization header
-    const token = extractTokenFromHeader(req);
+    // Extract token from Authorization header or query parameters (for SSE)
+    const token = extractToken(req);
     
     // If no token provided, continue without authentication
     if (!token) {

@@ -1,4 +1,4 @@
-import { useState, useCallback, useContext } from 'react';
+import { useState, useCallback } from 'react';
 import {
   generateRegistrationKeys,
   getUserPrivateKey,
@@ -6,11 +6,9 @@ import {
   encryptMessageForSending,
   decryptReceivedMessage,
   validateEncryptionKeys,
-  generateSessionKey,
   cleanupEncryptionData,
   verifyUserPassword,
   formatRegistrationEncryptionData,
-  parseEncryptedPrivateKeyData,
   isCryptoSupported,
   EncryptedRegistrationData,
   MessageEncryptionData
@@ -188,10 +186,13 @@ export function useEncryption(): UseEncryptionReturn {
     }
   }, [handleError]);
 
-  // Create a new session key
+  // Create a new session key (shared room key for chat)
   const createSessionKey = useCallback((): string | null => {
     try {
-      return generateSessionKey();
+      // For chat room, use a shared key so all users can decrypt each other's messages
+      // Use a proper 32-byte (256-bit) key for AES-256
+      const SHARED_ROOM_KEY = 'SecureChatRoom2024Key256BitLongX'; // Exactly 32 bytes
+      return SHARED_ROOM_KEY;
     } catch (error) {
       return handleError(error, 'session key generation');
     }

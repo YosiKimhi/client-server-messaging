@@ -39,10 +39,10 @@ interface UseRealTimeMessagesReturn {
  */
 export function useRealTimeMessages(): UseRealTimeMessagesReturn {
   const { user } = useAuth();
-  const { getSessionKey, createSessionKey, encryptWithSessionKey } = useMessageEncryption();
+  const { getSessionKey, createSessionKey } = useMessageEncryption();
   
   const [state, setState] = useState<UseRealTimeMessagesState>({
-    messages: [],
+    messages: [], // Ensure this is always an array
     connectionStatus: 'disconnected',
     connectionMode: 'none',
     isLoading: false,
@@ -55,9 +55,13 @@ export function useRealTimeMessages(): UseRealTimeMessagesReturn {
 
   // Helper to safely update state only if component is mounted
   const safeSetState = useCallback((updates: Partial<UseRealTimeMessagesState>) => {
-    if (mountedRef.current) {
-      setState(prev => ({ ...prev, ...updates }));
-    }
+    console.log('🔄 safeSetState called with:', updates, '| mounted:', mountedRef.current);
+    // Be more permissive with state updates
+    setState(prev => {
+      const newState = { ...prev, ...updates };
+      console.log('📊 State transition:', prev, '→', newState);
+      return newState;
+    });
   }, []);
 
   // Initialize session key for encryption
@@ -80,28 +84,34 @@ export function useRealTimeMessages(): UseRealTimeMessagesReturn {
     if (message.id === lastMessageIdRef.current) return;
     lastMessageIdRef.current = message.id;
 
-    safeSetState({
-      messages: prev => {
-        // Check if message already exists
-        const existingIndex = prev.findIndex(m => m.id === message.id);
-        if (existingIndex >= 0) {
-          // Update existing message
-          const updated = [...prev];
-          updated[existingIndex] = message;
-          return updated;
-        } else {
-          // Add new message
-          return [...prev, message];
-        }
+    setState(prev => {
+      // Check if message already exists
+      const existingIndex = prev.messages.findIndex((m: Message) => m.id === message.id);
+      if (existingIndex >= 0) {
+        // Update existing message
+        const updated = [...prev.messages];
+        updated[existingIndex] = message;
+        return { ...prev, messages: updated };
+      } else {
+        // Add new message
+        return { ...prev, messages: [...prev.messages, message] };
       }
     });
   }, [safeSetState]);
 
   // Handle connection status changes
   const handleConnectionStatus = useCallback((status: ConnectionStatus) => {
-    if (!mountedRef.current) return;
+    console.log('🎯 Hook received connection status:', status, '| Mounted:', mountedRef.current, '| Current state:', state.connectionStatus);
+    
+    // Always try to update state - let safeSetState handle the mounted check
+    console.log('📝 Updating React state to:', status);
     safeSetState({ connectionStatus: status });
-  }, [safeSetState]);
+    
+    // Verify the state update took effect
+    setTimeout(() => {
+      console.log('✅ State update check - status should be:', status);
+    }, 100);
+  }, [safeSetState, state.connectionStatus]);
 
   // Connect to real-time messaging
   const connect = useCallback((preferSSE = true) => {
@@ -110,14 +120,18 @@ export function useRealTimeMessages(): UseRealTimeMessagesReturn {
       return;
     }
 
+    console.log('🔌 Starting connection process - preferSSE:', preferSSE, '| EventSource available:', !!window.EventSource);
+    
     initializeEncryption();
     safeSetState({ connectionStatus: 'connecting', error: null });
 
     try {
       if (preferSSE && window.EventSource) {
+        console.log('📡 Attempting SSE connection...');
         messageService.connectSSE();
         safeSetState({ connectionMode: 'sse' });
       } else {
+        console.log('🔄 Starting polling connection...');
         messageService.startPolling();
         safeSetState({ connectionMode: 'polling' });
       }
@@ -142,6 +156,7 @@ export function useRealTimeMessages(): UseRealTimeMessagesReturn {
 
   // Disconnect from real-time messaging
   const disconnect = useCallback(() => {
+    console.log('🔌 Disconnecting...');
     messageService.disconnect();
     safeSetState({ 
       connectionStatus: 'disconnected',
@@ -151,13 +166,30 @@ export function useRealTimeMessages(): UseRealTimeMessagesReturn {
 
   // Reconnect with current mode
   const reconnect = useCallback(() => {
-    disconnect();
+    console.log('🔄 Reconnect called, current state:', { status: state.connectionStatus, mode: state.connectionMode });
+    messageService.disconnect();
+    safeSetState({ 
+      connectionStatus: 'disconnected',
+      connectionMode: 'none' 
+    });
+    
     setTimeout(() => {
-      if (mountedRef.current) {
-        connect(state.connectionMode === 'sse');
+      if (mountedRef.current && user) {
+        console.log('🚀 Direct reconnect attempt');
+        safeSetState({ connectionStatus: 'connecting', error: null });
+        
+        // Try SSE first
+        try {
+          messageService.connectSSE();
+          safeSetState({ connectionMode: 'sse' });
+        } catch (error) {
+          console.error('SSE failed, trying polling:', error);
+          messageService.startPolling();
+          safeSetState({ connectionMode: 'polling' });
+        }
       }
-    }, 1000);
-  }, [disconnect, connect, state.connectionMode]);
+    }, 500);
+  }, [user, safeSetState]);
 
   // Switch to polling mode
   const switchToPolling = useCallback(() => {
@@ -211,6 +243,12 @@ export function useRealTimeMessages(): UseRealTimeMessagesReturn {
 
   // Load message history
   const loadMessageHistory = useCallback(async (page = 1, limit = 50): Promise<void> => {
+    // Prevent multiple simultaneous requests
+    if (state.isLoading) {
+      console.log('⏸️ Message history request already in progress, skipping...');
+      return;
+    }
+
     safeSetState({ isLoading: true, error: null });
 
     try {
@@ -220,25 +258,36 @@ export function useRealTimeMessages(): UseRealTimeMessagesReturn {
       if (page === 1) {
         // Replace messages for first page
         safeSetState({ 
-          messages: response.messages,
+          messages: response.messages || [],
           isLoading: false 
         });
       } else {
         // Append messages for subsequent pages
-        safeSetState({ 
-          messages: prev => [...response.messages, ...prev],
+        setState(prev => ({
+          ...prev,
+          messages: [...response.messages, ...prev.messages],
           isLoading: false 
-        });
+        }));
       }
     } catch (error: any) {
-      const errorMessage = error?.message || 'Failed to load message history';
-      console.error('Error loading message history:', error);
+      let errorMessage = 'Failed to load message history';
+      
+      // Handle rate limit specifically
+      if (error?.status === 429) {
+        errorMessage = 'Too many requests. Please wait a moment and try again.';
+        console.warn('⚠️ Rate limit hit for message history');
+        // Don't retry automatically for rate limits
+      } else {
+        errorMessage = error?.message || errorMessage;
+        console.error('Error loading message history:', error);
+      }
+      
       safeSetState({ 
         error: errorMessage,
         isLoading: false 
       });
     }
-  }, [initializeEncryption, safeSetState]);
+  }, [initializeEncryption, safeSetState, state.isLoading]);
 
   // Clear messages
   const clearMessages = useCallback(() => {
@@ -253,30 +302,79 @@ export function useRealTimeMessages(): UseRealTimeMessagesReturn {
 
   // Set up event listeners on mount
   useEffect(() => {
+    console.log('🎧 Setting up message service listeners...');
     const unsubscribeMessage = messageService.onMessage(handleNewMessage);
     const unsubscribeStatus = messageService.onConnectionStatus(handleConnectionStatus);
+    console.log('✅ Listeners registered - message listeners:', (messageService as any).messageListeners.size, 'status listeners:', (messageService as any).connectionStatusListeners.size);
 
     return () => {
+      console.log('🧹 Cleaning up listeners...');
       unsubscribeMessage();
       unsubscribeStatus();
     };
-  }, [handleNewMessage, handleConnectionStatus]);
+  }, []); // Remove dependencies to prevent re-mounting
 
-  // Cleanup on unmount
+  // Cleanup on unmount - be more careful about when we disconnect
   useEffect(() => {
+    mountedRef.current = true; // Ensure this is set to true on mount
+    
     return () => {
+      console.log('🔄 Component unmounting...');
       mountedRef.current = false;
-      messageService.disconnect();
+      // Don't disconnect immediately - give some time for remount
+      setTimeout(() => {
+        if (!mountedRef.current) {
+          console.log('🧹 Component confirmed unmounted, disconnecting...');
+          messageService.disconnect();
+        }
+      }, 100);
     };
   }, []);
 
   // Auto-connect when user is available
   useEffect(() => {
     if (user && state.connectionStatus === 'disconnected' && state.connectionMode === 'none') {
+      console.log('🚀 Auto-connecting for user:', user.username, '| Status:', state.connectionStatus, '| Mode:', state.connectionMode);
       // Auto-connect with SSE first, fallback to polling
       connect(true);
     }
   }, [user, connect, state.connectionStatus, state.connectionMode]);
+
+  // Fallback to polling if SSE connection is stuck in connecting state
+  useEffect(() => {
+    if (state.connectionStatus === 'connecting' && state.connectionMode === 'sse') {
+      const fallbackTimer = setTimeout(() => {
+        if (mountedRef.current && state.connectionStatus === 'connecting') {
+          console.log('⏰ SSE connection timeout, falling back to polling');
+          messageService.disconnectSSE();
+          messageService.startPolling();
+          safeSetState({ connectionMode: 'polling' });
+        }
+      }, 1000); // Reduced to 1 second timeout for faster debugging
+
+      return () => clearTimeout(fallbackTimer);
+    }
+  }, [state.connectionStatus, state.connectionMode, safeSetState]);
+
+  // Emergency fallback - if still connecting after 10 seconds, force polling
+  useEffect(() => {
+    if (state.connectionStatus === 'connecting') {
+      const emergencyTimer = setTimeout(() => {
+        if (mountedRef.current && state.connectionStatus === 'connecting') {
+          console.log('🚨 Emergency fallback: forcing polling connection');
+          messageService.disconnect();
+          setTimeout(() => {
+            if (mountedRef.current) {
+              messageService.startPolling();
+              safeSetState({ connectionMode: 'polling', connectionStatus: 'connecting' });
+            }
+          }, 500);
+        }
+      }, 10000); // 10 second emergency timeout
+
+      return () => clearTimeout(emergencyTimer);
+    }
+  }, [state.connectionStatus, safeSetState]);
 
   return {
     state,
