@@ -113,6 +113,15 @@ npm run migrate  # Create tables
 npm run seed     # Add demo users (optional)
 ```
 
+### Demo Credentials
+After running the seed command, you can use these demo accounts to test the application:
+
+| Username | Password | Email |
+|----------|----------|-------|
+| alice_demo | SecurePass123! | alice@example.com |
+| bob_demo | StrongPass456! | bob@example.com |
+| charlie_demo | SafePass789! | charlie@example.com |
+
 6. **Start the application**
 ```bash
 # Terminal 1: Start server
